@@ -13,25 +13,25 @@ use leptos::prelude::*;
 /// keystroke re-parses the input and writes the result into it.
 #[component]
 pub fn WeightInput(weight_kg: RwSignal<Option<f64>>) -> impl IntoView {
-    view! {
-        <label class="text-input" for="weight-input">
-            <span class="caption-uppercase">"น้ำหนักตัว"</span>
-            <span class="text-input-row">
-                <input
-                    id="weight-input"
-                    type="number"
-                    inputmode="decimal"
-                    min="0"
-                    step="0.1"
-                    placeholder="เช่น 4.6"
-                    on:input=move |ev| {
-                        let raw = event_target_value(&ev);
-                        let parsed = raw.trim().parse::<f64>().ok();
-                        weight_kg.set(parsed);
-                    }
-                />
-                <span class="unit">"กก."</span>
-            </span>
-        </label>
-    }
+  view! {
+      <label class="text-input" for="weight-input">
+          <span class="caption-uppercase">"น้ำหนักตัว"</span>
+          <span class="text-input-row">
+              <input
+                  id="weight-input"
+                  type="number"
+                  inputmode="decimal"
+                  min="0"
+                  step="0.1"
+                  placeholder="เช่น 4.6"
+                  on:input=move |ev| {
+                      let raw = event_target_value(&ev);
+                      let parsed = raw.trim().parse::<f64>().ok();
+                      weight_kg.set(parsed);
+                  }
+              />
+              <span class="unit">"กก."</span>
+          </span>
+      </label>
+  }
 }

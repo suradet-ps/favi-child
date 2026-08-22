@@ -3,6 +3,6 @@
 use favi_child::components::app::App;
 
 fn main() {
-    console_error_panic_hook::set_once();
-    leptos::prelude::mount_to_body(App);
+  console_error_panic_hook::set_once();
+  leptos::prelude::mount_to_body(App);
 }
