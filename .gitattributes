@@ -1,0 +1,10 @@
+# Normalize line endings so sources stay LF on Windows checkouts
+* text=auto
+*.rs text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.svg text eol=lf
+*.json text eol=lf
+*.yml text eol=lf

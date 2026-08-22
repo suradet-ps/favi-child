@@ -1,11 +1,17 @@
-# Rust / Cargo
+# Rust
 /target
+**/*.rs.bk
 
-# trunk build output
+# Trunk
 /dist
 
-# editor / OS
+# OS
 .DS_Store
-*.swp
-.idea/
+Thumbs.db
+
+# Editor
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
