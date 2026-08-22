@@ -1,0 +1,17 @@
+# Trunk config for the FaviChild app (mirrors the rusttype reference repo).
+#
+# The app crate lives at the workspace root, so Trunk auto-detects Cargo.toml
+# as the app to build. This file pins the build/serve behavior explicitly.
+
+[build]
+target = "index.html"
+dist = "dist"
+public_url = "/"
+
+[watch]
+ignore = ["target", "dist"]
+
+[serve]
+addresses = ["127.0.0.1"]
+port = 3000
+open = false

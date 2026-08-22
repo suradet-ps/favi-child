@@ -1,0 +1,284 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-Dwarnings"
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
+      - run: cargo check --target wasm32-unknown-unknown
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+          components: clippy
+      - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
+      - run: cargo clippy --all-targets -- -D warnings
+
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
+      - run: cargo test
+
+  audit:
+    name: Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
+      - run: cargo install cargo-audit --locked
+      - run: cargo audit
+
+  deny:
+    name: Deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
+      - run: cargo install cargo-deny --locked
+      - run: cargo deny check
+
+  hex-audit:
+    name: Hex Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Fail on raw hex outside CSS token definitions
+        run: |
+          # Find hex colors (#rrggbb) in styles.css, excluding:
+          #   - lines that define CSS custom properties (--var-name)
+          #   - lines inside token definition blocks (:root, [data-theme])
+          #   - rgba() values (used inside token definitions)
+          matches=$(grep -nE '#[0-9a-fA-F]{6}' styles.css \
+            | grep -v '\-\-' \
+            | grep -v 'rgba(' || true)
+          if [ -n "$matches" ]; then
+            echo "::error::Raw hex colors found outside CSS token definitions:"
+            echo "$matches"
+            echo ""
+            echo "All hex values must live inside :root or [data-theme] token definitions."
+            echo "Use CSS custom properties (var(--token-name)) in component styles."
+            exit 1
+          fi
+          echo "No raw hex leakage found in styles.css"
+
+  csp-verify:
+    name: CSP Verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate CSP header in vercel.json
+        run: |
+          # Extract the CSP value from vercel.json
+          csp=$(python3 -c "
+          import json, sys
+          with open('vercel.json') as f:
+              cfg = json.load(f)
+          for block in cfg.get('headers', []):
+              for h in block.get('headers', []):
+                  if h['key'] == 'Content-Security-Policy':
+                      print(h['value'])
+                      sys.exit(0)
+          print('NOT_FOUND')
+          ")
+
+          if [ "$csp" = "NOT_FOUND" ]; then
+            echo "::error::Content-Security-Policy header not found in vercel.json"
+            exit 1
+          fi
+
+          echo "CSP: $csp"
+
+          # Required directives
+          for dir in default-src script-src style-src img-src font-src connect-src worker-src manifest-src; do
+            if ! echo "$csp" | grep -q "$dir"; then
+              echo "::error::Missing required CSP directive: $dir"
+              exit 1
+            fi
+          done
+
+          # Deny dangerous directives
+          # Remove 'wasm-unsafe-eval' before checking to avoid false positive
+          if echo "$csp" | sed "s/wasm-unsafe-eval//g" | grep -q "unsafe-eval"; then
+            echo "::error::CSP must not contain 'unsafe-eval'"
+            exit 1
+          fi
+
+          # style-src may contain 'unsafe-inline' (Leptos requirement)
+          style_val=$(echo "$csp" | sed -n 's/.*style-src \([^;]*\);.*/\1/p')
+          if echo "$style_val" | grep -q "unsafe-inline"; then
+            echo "  style-src contains 'unsafe-inline' (expected for Leptos)"
+          fi
+
+          # script-src may contain 'unsafe-inline' (Trunk generates an inline
+          # <script type="module"> to bootstrap WASM; the hash changes per build
+          # because filenames are content-hashed, so a static hash is not viable).
+          script_val=$(echo "$csp" | sed -n 's/.*script-src \([^;]*\);.*/\1/p')
+          if echo "$script_val" | grep -q "unsafe-inline"; then
+            echo "  script-src contains 'unsafe-inline' (Trunk WASM bootstrap)"
+          fi
+
+          echo "CSP header is valid and contains all required directives"
+
+  build:
+    name: Build
+    needs: [check, clippy, fmt, test, audit, deny, hex-audit, csp-verify]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
+      - name: Install binaryen (wasm-opt)
+        run: sudo apt-get install -y binaryen
+      - run: cargo install trunk --locked
+      - run: trunk build --release
+      - name: Verify wasm-opt ran
+        run: |
+          wasm_file=$(find dist -name '*_bg.wasm' | head -1)
+          if [ -z "$wasm_file" ]; then
+            echo "::error::No WASM file found in dist/"
+            exit 1
+          fi
+          size=$(stat -c%s "$wasm_file")
+          echo "WASM file: $wasm_file ($size bytes)"
+          # wasm-opt -Oz typically reduces to ~60-70% of original
+          # If raw size > 3MB, wasm-opt likely didn't run
+          if [ "$size" -gt 3145728 ]; then
+            echo "::warning::WASM file is ${size} bytes (>3MB). wasm-opt may not have run."
+          fi
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  perf-budget:
+    name: Performance Budget
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Check WASM gzipped size budget
+        run: |
+          wasm_file=$(find dist -name '*_bg.wasm' | head -1)
+          if [ -z "$wasm_file" ]; then
+            echo "::error::No WASM file found in dist/"
+            exit 1
+          fi
+
+          raw_size=$(stat -c%s "$wasm_file")
+          gzip_size=$(gzip -c "$wasm_file" | wc -c)
+
+          echo "WASM raw size:   $raw_size bytes ($(( raw_size / 1024 )) KB)"
+          echo "WASM gzip size:  $gzip_size bytes ($(( gzip_size / 1024 )) KB)"
+
+          # Budget: 1200 KB gzipped (10% headroom over 1057 KB baseline)
+          BUDGET_KB=1200
+          actual_kb=$(( gzip_size / 1024 ))
+
+          if [ "$actual_kb" -gt "$BUDGET_KB" ]; then
+            echo "::error::WASM gzipped size ${actual_kb} KB exceeds budget of ${BUDGET_KB} KB"
+            exit 1
+          fi
+
+          echo "WASM gzipped size ${actual_kb} KB is within budget (${BUDGET_KB} KB)"
+      - name: Check total bundle size budget
+        run: |
+          # Total bundle: WASM + JS + CSS (excluding fonts which are cached separately)
+          wasm_gzip=$(find dist -name '*_bg.wasm' -exec gzip -c {} \; | wc -c)
+          js_gzip=$(find dist -name '*.js' ! -name 'sw.js' -exec gzip -c {} \; | wc -c)
+          css_gzip=$(find dist -name '*.css' -exec gzip -c {} \; | wc -c)
+
+          total_gzip=$(( wasm_gzip + js_gzip + css_gzip ))
+          total_kb=$(( total_gzip / 1024 ))
+
+          echo "Bundle breakdown (gzipped):"
+          echo "  WASM: $(( wasm_gzip / 1024 )) KB"
+          echo "  JS:   $(( js_gzip / 1024 )) KB"
+          echo "  CSS:  $(( css_gzip / 1024 )) KB"
+          echo "  Total: ${total_kb} KB"
+
+          # Budget: 1350 KB total (WASM 1200 + JS 100 + CSS 50)
+          BUDGET_KB=1350
+          if [ "$total_kb" -gt "$BUDGET_KB" ]; then
+            echo "::error::Total bundle size ${total_kb} KB exceeds budget of ${BUDGET_KB} KB"
+            exit 1
+          fi
+
+          echo "Total bundle size ${total_kb} KB is within budget (${BUDGET_KB} KB)"
