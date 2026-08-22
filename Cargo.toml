@@ -1,0 +1,19 @@
+[package]
+name = "favi-child"
+version = "0.1.0"
+edition = "2024"
+description = "Pediatric Favipiravir suspension dosing calculator: body weight -> day-by-day tablet/diluent/draw-volume plan (Leptos CSR)"
+license = "MIT"
+keywords = ["leptos", "wasm", "healthcare", "dosing", "favipiravir"]
+categories = ["web-programming"]
+
+[dependencies]
+leptos = { version = "0.8", features = ["csr"] } # CSR-only web framework, no SSR/server boundary
+console_error_panic_hook = "0.1"                 # surface wasm panics in the browser devtools console
+
+[dev-dependencies]
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z" # minimize wasm bundle size (standard Leptos/trunk CSR profile)

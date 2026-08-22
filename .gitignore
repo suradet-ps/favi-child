@@ -1,0 +1,11 @@
+# Rust / Cargo
+/target
+
+# trunk build output
+/dist
+
+# editor / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
