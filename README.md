@@ -1,75 +1,139 @@
 # FaviChild
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+```
+███████╗ █████╗ ██╗   ██╗██╗
+██╔════╝██╔══██╗██║   ██║██║
+█████╗  ███████║██║   ██║██║
+██╔══╝  ██╔══██║╚██╗ ██╔╝██║
+██║     ██║  ██║ ╚████╔╝ ██║
+╚═╝╚═╝  ╚═╝  ╚═══╝╚═╝
+```
 
-A client-side (CSR/WASM) web app that converts a child's body weight (kg)
-into a day-by-day plan for preparing pediatric liquid-suspension Favipiravir
-(200 mg tablets): how many tablets to crush/dissolve, how much diluent
-(water) to use, and how much suspension to draw and administer per dose
-(AM/PM), for Day 1 and Days 2-5 of the regimen.
+---
 
-Built with **Leptos 0.8** and **trunk**. No backend, no database, no
-persistence - a single static page + wasm bundle.
+## ◆ PULSE
 
-> **Clinical disclaimer**: the dosing protocol constants encode a specific
-> clinical protocol and are **pending pharmacist (เวช) review before any
-> clinical use**. Some values are still explicitly open (see
-> [Open clinical decisions](#open-clinical-decisions)). This tool is for
+A child's dose of Favipiravir cannot be rounded into a hope. FaviChild
+turns one input - body weight in kilograms - into a day-by-day plan
+for preparing pediatric liquid suspension from 200 mg tablets: how
+many tablets to crush, how much diluent to use, and how much to draw
+per dose, AM and PM, for Day 1 and Days 2-5. Every rounding is shown,
+never hidden - the delivered mg and its delta against the theoretical
+dose sit beside the plan for the pharmacist's QC. When no safe,
+measurable plan exists, the page says so plainly.
+
+| Weight in ▣ | Day plans ▣ | Honest rounding ▣ | No-solution state ▣ |
+|---|---|---|---|
+
+*The plan loop - derive, measure, reveal, refuse - is sealed.*
+
+> Built with Leptos 0.8 + trunk; the clinical math lives in pure Rust
+> (`src/domain/`), independently unit-tested, untouched by the UI.
+>
+> **suradet-ps**, artifact keeper
+
+---
+
+## ◆ IGNITION
+
+One target, one tool, one command.
+
+```
+⟫ rustup target add wasm32-unknown-unknown
+⟫ cargo install trunk
+⟫ trunk serve
+```
+
+Open [http://127.0.0.1:8080](http://127.0.0.1:8080).
+
+The release artifact: `⟫ trunk build` - output in `dist/`.
+
+<details>
+<summary>Prerequisites</summary>
+
+- Rust with the `wasm32-unknown-unknown` target
+- [Trunk](https://trunkrs.dev/) - installed above
+
+</details>
+
+---
+
+## ◆ ANATOMY
+
+One signal, one domain, a boundary the math never crosses.
+
+- **Derives** - weight in, two regimens out: Day 1 at
+  35 mg/kg/dose, Days 2-5 at 15 mg/kg/dose, with Days 2-5 reusing a
+  single mixing plan computed once.
+- **Plans** - reconstitution in honest steps: tablet count `N` in
+  0.5-tablet steps, diluent volume `V` from two sizes only (5 mL
+  tried first, 10 mL fallback), and draw volume `D` in 0.5 mL
+  multiples.
+- **Reveals** - the actual delivered mg per dose and its delta
+  versus the theoretical dose - the rounding is on the page, where
+  the pharmacist can judge it, not buried in the algorithm.
+- **Refuses** - when no safe measurable plan exists, the state says
+  "no safe measurable plan found" instead of quietly printing an
+  invalid number.
+- **Separates** - `src/domain/` is pure Rust with zero Leptos
+  dependencies: all dosing logic lives there, unit-testable without a
+  browser; `src/components/` renders and never computes.
+
+---
+
+## ◆ RITUALS
+
+**The core ceremony** - the preparation plan:
+
+1. Enter the child's weight. One number in, one plan out.
+2. Read the Day 1 plan: tablets, diluent, draw volume, AM and PM.
+3. Check the QC line: delivered mg and the delta against the
+   theoretical dose - the rounding in plain sight.
+4. When no measurable plan exists, trust the refusal - the page
+   says so before the syringe is touched.
+
+**The ceremony of the visible rounding** - every plan is a set of
+measurable steps: 0.5-tablet steps, 5 or 10 mL diluent, 0.5 mL draws.
+What cannot be measured is not silently approximated; it is refused.
+
+**The ceremony of the pending review** - the protocol constants wait
+for the pharmacist's (เวช) sign-off, and the disclaimer says so on
+every use. The tool is for evaluation until the review lands; the
+review is the door, and the door is labeled.
+
+---
+
+## ◆ ECHOES
+
+**Where this artifact is heading**
+
+```
+derive  ▸ Day 1 + Days 2-5 regimens from weight ────────────────────── ▸ sealed
+measure ▸ 0.5-step tablets, 5/10 mL diluent, 0.5 mL draws ──────────── ▸ sealed
+reveal  ▸ delivered mg + delta QC line ──────────────────────────────── ▸ sealed
+refuse  ▸ explicit no-safe-plan state ───────────────────────────────── ▸ sealed
+```
+
+**Raising the artifact** - the clinical protocol lives in
+`AGENTS.md` §5-§8; the design tokens in `docs/DESIGN.md`; the CI
+checklist in `docs/AGENTS-RUST.md` §11. Gates: `cargo fmt --check`,
+`cargo check`, `cargo clippy -- -D warnings`, `cargo test`, and
+`cargo doc --no-deps` free of warnings. Open an issue first to
+discuss a change.
+
+**Status** - CI gates every push. [Watch the gates](.github/workflows).
+
+> Clinical disclaimer: the dosing constants encode a specific protocol
+> pending pharmacist review before any clinical use. This tool is for
 > evaluation and development purposes only.
 
-## Features
+---
 
-- Weight-only input; derives Day 1 (35 mg/kg/dose) and Days 2-5 (15 mg/kg/dose) plans.
-- Reconstitution planning: tablet count `N` (0.5-tablet steps), diluent volume `V`
-  (two sizes only: **5 mL tried first**, 10 mL fallback), and draw volume `D`
-  (multiples of 0.5 mL).
-- Days 2-5 reuse a single mixing plan - computed once (§4.3 rule 5).
-- Shows the actual delivered mg per dose and its delta vs. the theoretical dose
-  for pharmacist QC - rounding is visible, never hidden.
-- Explicit "no safe measurable plan found" state instead of silently-invalid output.
-
-## Getting started
-
-```bash
-# build + serve with hot reload (requires wasm32-unknown-unknown target)
-trunk serve
-
-# production build (outputs to dist/)
-trunk build
 ```
-
-Then open http://127.0.0.1:8080 (trunk's default dev server port).
-
-## Development
-
-```bash
-cargo fmt --check
-cargo check
-cargo clippy -- -D warnings
-cargo test
-cargo doc --no-deps 2>&1 | grep warning
+  ─────────────────────────────────────────
+   A dose that cannot be measured
+   is a dose that must not be given.
+  ─────────────────────────────────────────
 ```
-
-The full CI checklist lives in `docs/AGENTS-RUST.md` §11.
-
-## Architecture
-
-`src/domain/` is pure Rust with zero Leptos dependencies - all clinical logic
-lives here and is independently unit-testable. `src/components/` only calls
-into `domain/` and renders results; it never contains dosing math. State is a
-single `RwSignal<Option<f64>>` at the app root, with day plans derived from it
-(AGENTS.md §5-§6). Visual design tokens: `docs/DESIGN.md`.
-
-## Open clinical decisions
-
-Per `AGENTS.md` §8, these still await เวช's decision and are **not assumed**:
-
-1. Minimum-weight plausibility bound (low-end input cutoff).
-2. Dosing error tolerance for the whole-mL/half-mL tie-break - implemented with
-   a provisional `ROUNDING_TOLERANCE_ML = 0.25` mL (the maximum error possible
-   at a 0.5 mL graduation), so it never filters out candidates.
-3. Output format beyond on-screen display (printable sheet, etc.).
-
-## License
 
 MIT - see [LICENSE](LICENSE).
