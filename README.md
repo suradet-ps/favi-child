@@ -6,7 +6,7 @@
 █████╗  ███████║██║   ██║██║██║     ███████║██║██║     ██║  ██║
 ██╔══╝  ██╔══██║╚██╗ ██╔╝██║██║     ██║  ██║██║██║     ██║  ██║
 ██║     ██║  ██║ ╚████╔╝ ██║╚██████╗██║  ██║██║███████╗██████╔╝
-╚═╝╚═╝  ╚═╝  ╚═══╝╚═╝ ╚═════╝╚═╝  ╚═╝╚═╝╚══════╝╚═════╝
+╚═╝     ╚═╝  ╚═╝  ╚═══╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚═╝╚══════╝╚═════╝
 ```
 
 ---
@@ -67,7 +67,7 @@ One signal, one domain, a boundary the math never crosses.
   single mixing plan computed once.
 - **Plans** - reconstitution in honest steps: tablet count `N` in
   0.5-tablet steps, diluent volume `V` from two sizes only (5 mL
-  tried first, 10 mL fallback), and draw volume `D` in 0.5 mL
+  tried first, 10 mL fallback), and draw volume `D` in 0.2 mL
   multiples.
 - **Reveals** - the actual delivered mg per dose and its delta
   versus the theoretical dose - the rounding is on the page, where
@@ -93,7 +93,7 @@ One signal, one domain, a boundary the math never crosses.
    says so before the syringe is touched.
 
 **The ceremony of the visible rounding** - every plan is a set of
-measurable steps: 0.5-tablet steps, 5 or 10 mL diluent, 0.5 mL draws.
+measurable steps: 0.5-tablet steps, 5 or 10 mL diluent, 0.2 mL draws.
 What cannot be measured is not silently approximated; it is refused.
 
 **The ceremony of the pending review** - the protocol constants wait
@@ -109,7 +109,7 @@ review is the door, and the door is labeled.
 
 ```
 derive  ▸ Day 1 + Days 2-5 regimens from weight ────────────────────── ▸ sealed
-measure ▸ 0.5-step tablets, 5/10 mL diluent, 0.5 mL draws ──────────── ▸ sealed
+measure ▸ 0.5-step tablets, 5/10 mL diluent, 0.2 mL draws ──────────── ▸ sealed
 reveal  ▸ delivered mg + delta QC line ──────────────────────────────── ▸ sealed
 refuse  ▸ explicit no-safe-plan state ───────────────────────────────── ▸ sealed
 ```
@@ -136,4 +136,4 @@ discuss a change.
   ─────────────────────────────────────────
 ```
 
-MIT - see [LICENSE](LICENSE).
+Distributed under the [MIT License](LICENSE).

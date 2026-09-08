@@ -15,21 +15,23 @@
 //!    the 5 mL size is always tried first, with 10 mL used only when no valid
 //!    plan fits in 5 mL (user-confirmed clinical choice, pending เวช sign-off).
 //! 2. **Correctness** - the rounded draw volume satisfies `D <= V`.
-//! 3. **Measurability** - `D` is a multiple of 0.5 mL (syringe graduation)
-//!    and at least 1.0 mL.
-//! 4. **Roundness** - tie-break: a whole-mL `D` is preferred over a half-mL
-//!    `D` when both are within the rounding-error tolerance
-//!    (see [`ROUNDING_TOLERANCE_ML`], value pending pharmacist confirmation).
+//! 3. **Measurability** - `D` is a multiple of 0.2 mL (syringe graduation,
+//!    user-confirmed) and at least 1.0 mL.
+//! 4. **Roundness** - tie-break: a whole-mL `D` is preferred over a
+//!    fractional 0.2-mL-grid `D` when both are within the rounding-error
+//!    tolerance (see [`ROUNDING_TOLERANCE_ML`], value pending pharmacist
+//!    confirmation).
 //! 5. **Economy** - the smallest tablet count `N` wins.
 //!
 //! # Termination
 //!
 //! The search enumerates `N` from 0.5 up to the smallest 0.5-multiple that is
 //! `>= dose / 200`. That boundary is provably valid: with `V = 5 mL` the
-//! exact draw volume there is at most 5 mL (and at least ~0.83 mL for
-//! `dose_mg >= 20`), so a candidate always exists for `dose_mg >= 20`. Below
-//! that the explicit [`PlanError::NoSafePlan`] rejection is returned - never
-//! a silently-invalid draw volume (§4.5).
+//! exact draw volume there is at most 5 mL and at least 0.9 mL, so it rounds
+//! to a drawable `D >= 1.0 mL`; for doses below ~9 mg a `V = 10 mL` fallback
+//! candidate (`N = 0.5`, `D = 1.0 mL`) covers down to 9 mg. Below that the
+//! explicit [`PlanError::NoSafePlan`] rejection is returned - never a
+//! silently-invalid draw volume (§4.5).
 
 use std::fmt;
 
@@ -48,7 +50,7 @@ pub struct MixingPlan {
   pub tablets: f64,
   /// Diluent (water) volume in mL.
   pub diluent_ml: f64,
-  /// Draw volume per administration in mL, a multiple of 0.5 mL.
+  /// Draw volume per administration in mL, a multiple of 0.2 mL.
   pub draw_ml: f64,
   /// Resulting concentration of the mixed suspension, mg per mL.
   pub concentration_mg_per_ml: f64,
@@ -146,7 +148,8 @@ pub fn plan_for_weight(weight_kg: f64) -> Result<RegimenPlan, PlanError> {
 /// boundary and `V` over the two-size diluent set `{5, 10}` mL, then ranks
 /// the valid candidates: **5 mL is tried first** (10 mL is only used when no
 /// valid plan fits in 5 mL), then economy (smallest `N`), roundness (whole-mL
-/// draw over half-mL), and finally smallest rounding delta (§4.3).
+/// draw over a fractional 0.2-mL-grid draw), and finally smallest rounding
+/// delta (§4.3).
 ///
 /// # Errors
 ///
@@ -199,7 +202,7 @@ pub fn plan_for_dose(dose_mg: f64) -> Result<MixingPlan, PlanError> {
     a.diluent_ml
       .total_cmp(&b.diluent_ml) // diluent preference: 5 mL first, 10 mL fallback
       .then_with(|| a.tablets.total_cmp(&b.tablets)) // economy: fewest tablets
-      .then_with(|| whole_ml(b.draw_ml).cmp(&whole_ml(a.draw_ml))) // roundness: whole-mL over half-mL
+      .then_with(|| whole_ml(b.draw_ml).cmp(&whole_ml(a.draw_ml))) // roundness: whole-mL over fractional
       .then_with(|| a.delta_mg.abs().total_cmp(&b.delta_mg.abs())) // smallest dosing delta
   });
 
@@ -210,15 +213,19 @@ pub fn plan_for_dose(dose_mg: f64) -> Result<MixingPlan, PlanError> {
 }
 
 /// True when `(tablets, diluent_ml)` yields a draw volume meeting the hard
-/// selection rules: measurable (`D >= 1.0 mL`, 0.5-mL multiple by rounding),
+/// selection rules: measurable (`D >= 1.0 mL`, 0.2-mL multiple by rounding),
 /// fits the mixture (`D <= V`), and within the rounding-error tolerance.
 fn is_valid_candidate(dose_mg: f64, tablets: f64, diluent_ml: f64) -> bool {
   let concentration_mg_per_ml = tablets * TABLET_STRENGTH_MG / diluent_ml;
   let exact_draw_ml = dose_mg / concentration_mg_per_ml;
   let draw_ml = round_to_step(exact_draw_ml, DRAW_VOLUME_GRADUATION_ML);
+  // The 0.2 mL step is not binary-exact, so a draw that mathematically ties
+  // at half a step (rounding error exactly equal to the tolerance) can
+  // measure one ULP above it; the slack keeps those candidates valid.
+  const FP_SLACK_ML: f64 = 1e-9;
   draw_ml >= MIN_DRAW_VOLUME_ML
     && draw_ml <= diluent_ml
-    && (exact_draw_ml - draw_ml).abs() <= ROUNDING_TOLERANCE_ML
+    && (exact_draw_ml - draw_ml).abs() <= ROUNDING_TOLERANCE_ML + FP_SLACK_ML
 }
 
 /// Smallest 0.5-multiple of tablets `>= dose / 200` - the search boundary
@@ -237,7 +244,7 @@ fn ceil_to_step(value: f64, step: f64) -> f64 {
   (value / step).ceil() * step
 }
 
-/// True when a draw volume (multiple of 0.5 mL by construction) is whole-mL.
+/// True when a draw volume (multiple of 0.2 mL by construction) is whole-mL.
 fn whole_ml(draw_ml: f64) -> bool {
   draw_ml.fract() == 0.0
 }
@@ -261,14 +268,63 @@ mod tests {
   }
 
   /// Days 2-5 for 4.6 kg: dose 69 mg. 5 mL is tried first and works
-  /// (N = 0.5, D = 3.5), so 10 mL is never used.
+  /// (N = 0.5, D = 3.4), so 10 mL is never used. Under the old 0.5 mL
+  /// graduation this draw was 3.5 mL - 3.4 mL is now reachable.
   #[test]
   fn worked_example_weight_4_6_days2_5_prefers_5_ml_diluent() {
     let plan = plan_for_weight(4.6).expect("4.6 kg must produce a plan");
     assert_eq!(plan.days2_5.dose_mg, 69.0);
     assert_eq!(plan.days2_5.tablets, 0.5);
     assert_eq!(plan.days2_5.diluent_ml, 5.0);
-    assert_eq!(plan.days2_5.draw_ml, 3.5);
+    assert_ml_close(plan.days2_5.draw_ml, 3.4, "4.6 kg days 2-5 draw");
+    assert_ml_close(plan.days2_5.delivered_mg, 68.0, "4.6 kg days 2-5 delivered");
+    assert_ml_close(plan.days2_5.delta_mg, -1.0, "4.6 kg days 2-5 delta");
+  }
+
+  /// The 0.2 mL syringe graduation makes draws that were impossible on the
+  /// old 0.5 mL grid (2.2, 2.4, 2.6 mL) first-class results: same mixing
+  /// plan (0.5 tablet / 5 mL), draw rounded to the nearest 0.2 mL step.
+  #[test]
+  fn draw_volume_rounds_to_0_2_ml_steps() {
+    for (dose_mg, expected_draw_ml) in [
+      (44.0, 2.2), // exact 2.2 → 11 × 0.2
+      (47.0, 2.4), // exact 2.35 → rounds to 2.4
+      (53.0, 2.6), // exact 2.65 → rounds to 2.6
+      (56.0, 2.8), // exact 2.8 → 14 × 0.2
+    ] {
+      let plan = plan_for_dose(dose_mg).unwrap_or_else(|e| panic!("dose {dose_mg} mg: {e}"));
+      assert_eq!(
+        plan.tablets, 0.5,
+        "dose {dose_mg} mg must use the economical 0.5-tablet plan"
+      );
+      assert_eq!(plan.diluent_ml, 5.0, "dose {dose_mg} mg must fit in 5 mL");
+      assert_ml_close(
+        plan.draw_ml,
+        expected_draw_ml,
+        &format!("dose {dose_mg} mg draw"),
+      );
+    }
+  }
+
+  /// Whole-mL draws remain preferred as a tie-break: the spec's worked dose
+  /// of 161 mg still lands on a clean 4.0 mL draw (see §4.3 example).
+  #[test]
+  fn worked_dose_still_rounds_to_whole_millilitre() {
+    let plan = plan_for_dose(161.0).expect("161 mg must produce a plan");
+    assert_eq!(plan.tablets, 1.0);
+    assert_eq!(plan.diluent_ml, 5.0);
+    assert_eq!(plan.draw_ml, 4.0);
+  }
+
+  /// End-to-end at weight 2.9 kg: Day 1 stays whole (5.0 mL) while Days 2-5
+  /// lands on 2.2 mL - a draw the old half-mL syringe could not deliver.
+  #[test]
+  fn weight_2_9_days2_5_uses_fractional_0_2_ml_draw() {
+    let plan = plan_for_weight(2.9).expect("2.9 kg must produce a plan");
+    assert_ml_close(plan.day1.draw_ml, 5.0, "2.9 kg day 1 draw");
+    assert_ml_close(plan.days2_5.draw_ml, 2.2, "2.9 kg days 2-5 draw");
+    assert_eq!(plan.days2_5.tablets, 0.5);
+    assert_eq!(plan.days2_5.diluent_ml, 5.0);
   }
 
   /// Rule 5: the Days 2-5 plan is computed once and must be deterministic -
@@ -293,10 +349,32 @@ mod tests {
 
   /// §4.5: extremely low weights must surface an explicit "no safe plan"
   /// state instead of a silently-invalid draw volume.
+  ///
+  /// With a 0.2 mL graduation the smallest drawable volume is 1.0 mL, which
+  /// is reachable down to a 9 mg dose (N = 0.5, V = 10 mL). Days 2-5 dose at
+  /// 15 mg/kg therefore needs weight >= 0.6 kg.
   #[test]
   fn extremely_low_weight_returns_no_safe_plan() {
-    let err = plan_for_weight(0.05).expect_err("0.05 kg must have no safe plan");
-    assert!(matches!(err, PlanError::NoSafePlan { dose_mg } if dose_mg < 2.0));
+    for weight in [0.05, 0.25, 0.5, 0.55, 0.59] {
+      let err = plan_for_weight(weight).expect_err("{weight} kg must have no safe plan");
+      assert!(
+        matches!(err, PlanError::NoSafePlan { dose_mg } if dose_mg < 9.0),
+        "unexpected error for {weight} kg: {err}"
+      );
+    }
+  }
+
+  /// Boundary just above the 0.6 kg cutoff: a 9 mg Days 2-5 dose (0.5 tablet
+  /// in 10 mL → draw 1.0 mL) is measurable, so a full plan must exist.
+  #[test]
+  fn weight_0_6_kg_is_smallest_with_a_plan() {
+    let plan = plan_for_weight(0.6).expect("0.6 kg must produce a plan");
+    assert_eq!(plan.days2_5.dose_mg, 9.0);
+    assert_eq!(plan.days2_5.tablets, 0.5);
+    assert_eq!(plan.days2_5.diluent_ml, 10.0);
+    assert_ml_close(plan.days2_5.draw_ml, 1.0, "0.6 kg days 2-5 draw");
+    assert_invariants(&plan.day1, 0.6, "day1");
+    assert_invariants(&plan.days2_5, 0.6, "days2_5");
   }
 
   /// plan_for_dose rejects non-positive doses directly.
@@ -320,10 +398,10 @@ mod tests {
           assert_invariants(&plan.days2_5, weight, "days2_5");
         }
         Err(PlanError::NoSafePlan { .. }) => {
-          // Days 2-5 needs dose >= 7.5 mg for any measurable plan
-          // with V <= 10 mL, i.e. weight >= 0.5 kg; below that
-          // NoSafePlan is correct.
-          assert!(weight < 0.5, "unexpected NoSafePlan for {weight} kg");
+          // Days 2-5 needs dose >= 9 mg for any measurable plan (draw must
+          // round to >= 1.0 mL even at the 10 mL fallback), i.e. weight
+          // >= 0.6 kg; below that NoSafePlan is correct.
+          assert!(weight < 0.6, "unexpected NoSafePlan for {weight} kg");
         }
         Err(other) => panic!("unexpected error for {weight} kg: {other}"),
       }
@@ -344,11 +422,12 @@ mod tests {
   /// Invariants that must hold for every produced plan (§4.3 rules 1-2, §4.4).
   fn assert_invariants(plan: &MixingPlan, weight: f64, label: &str) {
     let ctx = format!("{weight} kg {label}");
-    // measurability: draw volume is a multiple of 0.5 mL
+    // measurability: draw volume is a multiple of the syringe graduation
     assert!(
-      (plan.draw_ml * 2.0).fract().abs() < 1e-9,
-      "{ctx}: draw {:.2} mL not a 0.5-multiple",
-      plan.draw_ml
+      (round_to_step(plan.draw_ml, DRAW_VOLUME_GRADUATION_ML) - plan.draw_ml).abs() < 1e-6,
+      "{ctx}: draw {:.2} mL not a {}-multiple",
+      plan.draw_ml,
+      DRAW_VOLUME_GRADUATION_ML
     );
     // correctness: draw volume fits the mixture and is not too small
     assert!(
@@ -382,7 +461,8 @@ mod tests {
   /// candidate was skipped.
   #[test]
   fn selection_prefers_5_ml_then_smallest_tablet_count() {
-    for weight in (5..=500).map(|t| t as f64 / 10.0) {
+    // plans exist from 0.6 kg up (see no-safe-plan boundary tests)
+    for weight in (6..=500).map(|t| t as f64 / 10.0) {
       let plan = plan_for_weight(weight).expect("plan must exist");
       for day_plan in [&plan.day1, &plan.days2_5] {
         // no valid candidate in a smaller diluent size
@@ -415,5 +495,14 @@ mod tests {
         }
       }
     }
+  }
+
+  /// 0.2 mL grid values are not exact in binary floating point, so value
+  /// assertions on draws compare within a tight epsilon instead of `==`.
+  fn assert_ml_close(actual: f64, expected: f64, ctx: &str) {
+    assert!(
+      (actual - expected).abs() < 1e-6,
+      "{ctx}: expected {expected} but got {actual}"
+    );
   }
 }

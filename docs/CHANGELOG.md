@@ -34,8 +34,14 @@ All notable changes to this project are documented here, following
   is the fallback when no valid plan fits in 5 mL (user-confirmed protocol
   change; pending เวช sign-off). Search boundary and `NoSafePlan` threshold
   (weight < 0.5 kg) updated accordingly.
+- Syringe graduation refined from 0.5 mL to **0.2 mL** steps (user-confirmed;
+  supersedes the earlier whole/half-mL graduation). Draw volumes now round to
+  the nearest 0.2 mL (e.g. 2.2, 2.4, 2.6 mL); provisional rounding tolerance
+  adjusted to 0.1 mL (half of the new step, pending เวช sign-off). Days 2-5
+  `NoSafePlan` threshold moves to weight < 0.6 kg (a 9 mg dose is the
+  smallest measurable, via 0.5 tablet / 10 mL / 1.0 mL draw).
 
 ### Pending clinical confirmation
 
-- Rounding-error tolerance for the whole-mL tie-break (provisional 0.25 mL).
+- Rounding-error tolerance for the whole-mL tie-break (provisional 0.1 mL).
 - Minimum-weight plausibility bound (not enforced yet).

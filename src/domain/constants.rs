@@ -20,8 +20,11 @@ pub const DOSES_PER_DAY: u32 = 2;
 /// back to 10 mL when no valid plan fits in 5 mL. Pending เวช sign-off.
 pub const DILUENT_VOLUMES_ML: [f64; 2] = [5.0, 10.0];
 
-/// Syringe graduation: draw volumes are multiples of 0.5 mL (§8, decision 2).
-pub const DRAW_VOLUME_GRADUATION_ML: f64 = 0.5;
+/// Syringe graduation: draw volumes are multiples of 0.2 mL (§8, decision 2).
+///
+/// Revised (user-confirmed): the syringe reads in 0.2 mL steps, so draws like
+/// 2.2, 2.4, or 2.6 mL are measurable - not just whole/half mL as before.
+pub const DRAW_VOLUME_GRADUATION_ML: f64 = 0.2;
 
 /// Draw volumes below this are rejected: too small to measure precisely (§4.3 rule 2).
 pub const MIN_DRAW_VOLUME_ML: f64 = 1.0;
@@ -29,17 +32,18 @@ pub const MIN_DRAW_VOLUME_ML: f64 = 1.0;
 /// Provisional rounding-error tolerance (mL) for the §4.3 rule 3 tie-break.
 ///
 /// ⚠️ **Pending pharmacist confirmation** (§8, open item 2). The provisional
-/// value is 0.25 mL - the maximum error possible when rounding a draw volume
-/// to the nearest 0.5 mL - so no candidate is ever filtered out by it and the
+/// value is 0.1 mL - the maximum error possible when rounding a draw volume
+/// to the nearest 0.2 mL - so no candidate is ever filtered out by it and the
 /// whole-mL preference acts purely as a tie-break, as §4.3 describes.
-pub const ROUNDING_TOLERANCE_ML: f64 = 0.25;
+pub const ROUNDING_TOLERANCE_ML: f64 = 0.1;
 
 /// Minimum weight plausibility bound (kg).
 ///
 /// ⚠️ **Pending pharmacist confirmation** (§8, open item 1). The spec's
 /// confirmed rules only reject `weight <= 0` / non-numeric input (§4.5); the
 /// low-end plausibility cutoff (to catch typos) is intentionally **not**
-/// enforced until เวช confirms it. Below ~0.5 kg (Days 2-5 dose below
-/// 7.5 mg) the search naturally returns
+/// enforced until เวช confirms it. Below ~0.6 kg (Days 2-5 dose below
+/// 9 mg, the smallest measurable draw on the 0.2 mL graduation) the search
+/// naturally returns
 /// [`PlanError::NoSafePlan`](crate::domain::plan::PlanError::NoSafePlan).
 pub const MIN_PLAUSIBLE_WEIGHT_KG: Option<f64> = None;

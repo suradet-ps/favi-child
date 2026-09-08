@@ -100,14 +100,14 @@ D = dose_mg / concentration_mg_per_mL
 **Selection criteria** (search over candidate `N`, `V` pairs to pick the
 best plan):
 1. **Correctness:** `D <= V` (cannot draw more than what was mixed).
-2. **Measurability:** `D` must be a **multiple of 0.5 mL** (i.e., only
-   whole-mL or half-mL draw volumes are allowed — confirmed syringe
-   graduation). Round the mathematically exact draw volume to the nearest
-   0.5 mL. Also avoid `D < 1.0 mL` (too small to measure precisely).
-3. **Roundness:** since `D` is already constrained to 0.5 mL increments by
+2. **Measurability:** `D` must be a **multiple of 0.2 mL** (confirmed syringe
+   graduation: 0.2 mL steps, e.g. 2.2, 2.4, 2.6 mL — not just whole or half
+   mL). Round the mathematically exact draw volume to the nearest 0.2 mL.
+   Also avoid `D < 1.0 mL` (too small to measure precisely).
+3. **Roundness:** since `D` is already constrained to 0.2 mL increments by
    rule 2, this criterion is about tie-breaking: when multiple `(N, V)`
-   pairs round to acceptably close 0.5 mL draw volumes, prefer whole-mL
-   values over half-mL values (e.g., prefer `D = 4.0` over `D = 4.5`) when
+   pairs round to acceptably close 0.2 mL draw volumes, prefer whole-mL
+   values over fractional ones (e.g., prefer `D = 4.0` over `D = 4.2`) when
    both are within acceptable dosing error tolerance (tolerance value:
    **to be confirmed**, see §8).
 4. **Economy:** prefer the smallest `N` (fewest tablets consumed/wasted)
@@ -125,7 +125,7 @@ day1_dose_per_administration_mg = 35 * 4.6 = 161 mg
 
 Candidate: N = 1 tablet (200 mg), V = 5 mL
   concentration = 200 / 5 = 40 mg/mL
-  D = 161 / 40 = 4.025 mL → rounds to nearest 0.5 mL = 4.0 mL  ✅ matches example
+  D = 161 / 40 = 4.025 mL → rounds to nearest 0.2 mL = 4.0 mL  ✅ matches example
 ```
 This confirms the algorithm shape: **do not** round the tablet count to
 match the dose exactly; instead fix a workable `(N, V)` and let the *draw
@@ -212,8 +212,9 @@ Because incorrect output here has direct patient-safety consequences,
 ## 8. Decisions Log
 
 1. **Diluent volume set:** `{5, 10, 15, 20, 25, 30}` mL — confirmed.
-2. **Syringe graduation:** draw volume `D` must be a multiple of **0.5 mL**
-   (whole or half mL only) — confirmed. See §4.3 rule 2.
+2. **Syringe graduation:** draw volume `D` must be a multiple of **0.2 mL**
+   (0.2 mL steps, e.g. 2.2 / 2.4 / 2.6 mL — not just whole or half mL) —
+   confirmed. Supersedes the earlier 0.5 mL graduation. See §4.3 rule 2.
 3. **Weight bounds:** **no upper bound** on weight — confirmed. See §4.5.
 4. **Day 2–5 mixing plan:** identical `(N, V)` plan reused across all four
    days, computed once — confirmed. See §4.3 rule 5.
@@ -223,8 +224,8 @@ Still open (need เวช's decision before implementation):
 1. **Minimum-weight plausibility bound** — exact low-end cutoff for input
    validation (to catch typos, not a clinical ceiling). See §4.5.
 2. **Dosing error tolerance** for the tie-break rule in §4.3 rule 3 (when
-   choosing between a whole-mL vs. half-mL draw volume that are both
-   within acceptable range of the exact dose).
+   choosing between a whole-mL vs. a fractional 0.2-mL draw volume that are
+   both within acceptable range of the exact dose).
 3. **Output format** beyond on-screen display — printable sheet? Thai-
    language instruction text baked into the UI, or component-only with
    copy handled via `docs/DESIGN.md`
